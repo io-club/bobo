@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import random
 from telethon import TelegramClient, events
-from telethon.tl.functions.messages import ForwardMessagesRequest, SendMessageRequest
+from telethon.tl.functions.messages import ForwardMessagesRequest
 import config
 
 from openai import OpenAI
@@ -183,11 +183,6 @@ async def my_event_handler(event):
         if not use_ai:
             await client.send_message(config.IO群, f"useAI: {use_ai}")
         else:
-            SendMessageRequest(
-                peer=config.IO群,
-                message=f"{event.text}",
-                link_preview=False,
-            )
             reason = res["reason"]
             await client.send_message(
                 config.IO群,
@@ -245,11 +240,28 @@ async def cat_from_stuff_send(event):
     print(messages)
     res = ai._ask(messages)
     ai.dialog.append_and_get_by_user(event.peer_id, event.from_id, res, True)
-    m = await event.respond(res + " (10秒后自动删除)")
+
+    m = await client.send_message(
+        event.chat_id,
+        res + " (10秒后自动删除)",
+        reply_to=event.message.id,
+        silent=True,
+    )
+
+    # 等待用户是否保留
     await asyncio.sleep(10)
-    await client.delete_messages(event.chat_id, [m.id])
+
+    # 检查是否有 reaction，因为只有 bot api 支持发送按钮
+    m = await client.get_messages(event.chat_id, ids=m.id)
+    if m.reactions is not None and len(m.reactions.results) > 0:
+        # 有了就不删除，并把结尾的 (10s 后自动删除去掉)
+        await client.edit_message(event.chat_id, m, res)
+    else:
+        # 没有就删除
+        await client.delete_messages(event.chat_id, [m.id])
 
 
-client.start()
-print("启动了")
-client.run_until_disconnected()
+if __name__ == "__main__":
+    client.start()
+    print("启动了")
+    client.run_until_disconnected()
