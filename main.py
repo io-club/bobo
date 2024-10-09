@@ -234,7 +234,7 @@ async def cat_from_stuff_send(event):
         event.peer_id,
         event.from_id,
         event.text,
-        prompt="你现在扮演的是全心全意侍奉主人的可爱猫娘，说话一定要可爱一点哦，每句话结尾都必须带上 `喵~`. 请回复下面的消息(20字以内): ",
+        prompt=config.cat_prompt,
         res=True,
     )
     print(messages)
