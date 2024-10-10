@@ -24,13 +24,24 @@ class AI:
             self.dialog = {}
             self.dialog_local = {}
 
-        def append_and_get(self, channel_id, text, prompt=None, res=False):
+        def update_prompt(self, channel_id, prompt):
+            channel_id = str(channel_id)
+            msg = {"user_id": 0, "role": "system", "content": prompt}
+            if channel_id not in self.dialog:
+                self.dialog[channel_id] = [msg]
+            elif len(self.dialog[channel_id]) == 0:
+                self.dialog[channel_id].append(msg)
+            else:
+                self.dialog[channel_id][0]["content"] = prompt
+
+        def append_and_get(self, channel_id, user_id, text, prompt=None, res=False):
             channel_id = str(channel_id)
             if channel_id not in self.dialog:
                 self.dialog[channel_id] = []
                 if prompt is not None:
                     self.dialog[channel_id].append(
                         {
+                            "user_id": 0,
                             "role": "system",
                             "content": prompt,
                         }
@@ -41,6 +52,7 @@ class AI:
 
             self.dialog[channel_id].append(
                 {
+                    "user_id": str(user_id) if not res else 0,
                     "role": "user" if not res else "system",
                     "content": text,
                 }
@@ -121,7 +133,9 @@ class AI:
     def if_fruit(self, text: str):
         try:
             response = self.ask(
-                f"""下面一段话包含了购物推荐信息，判断是否是推荐的是完好的，没有经过任何二次加工的，现摘水果 或者 特别便宜的小零食
+                f"""下面一段话包含了购物推荐信息，判断是否是现摘水果 或者 特别便宜的小零食
+- 不要以水果为原料制作的产品
+- 不要果汁
 返回值使用标准 json 格式，不要带有 markdown 格式，需要能被 python json.loads 成功解析，例如：
 {{
     "is_fruit": true,
@@ -229,17 +243,56 @@ async def ask_from_other_send(event):
     )
 )
 async def cat_from_stuff_send(event):
+    if event.text.startswith("prompt"):
+        ai.dialog.update_prompt(event.peer_id, event.text[6:])
+        return
+
     print("--- cat_from_stuff_send")
-    messages = ai.dialog.append_and_get_by_user(
+    messages = ai.dialog.append_and_get(
         event.peer_id,
         event.from_id,
         event.text,
         prompt=config.cat_prompt,
         res=True,
     )
+
+    message = "\n".join(
+        [
+            "id:"
+            + str(id)
+            + ", user_id:"
+            + str(msg["user_id"])
+            + ":"
+            + msg["content"]
+            + "\n"
+            for (id, msg) in enumerate(messages)
+        ]
+    )
+    print(message)
+    res = ai._ask(
+        [
+            {
+                "role": "system",
+                "content": """以下是一段对话，里面包含多个角色
+- id 表示对话编号
+- user_id 表示用户，其中 user_id 为 0 的表示你，其他为普通用户
+
+请仔细分辨这段对话中的最后一句话，是对你的提问，还是对其他用户的提问
+- @xxx 的一般是和其他用户的交流，你不用回复，但是要按情况
+- 如果提问没有主语，请结合上下文分析，没有上下文你可以回复
+- 心情好你也可以随意接话，可以适当积极一些
+如果是对你的提问 请回复 1， 如果不是请回复 0，只回复这个数字即可，不要带任何其他内容:\n"""
+                + message,
+            }
+        ]
+    )
+    if res == "0":
+        print("不是问题")
+        return
+
     print(messages)
     res = ai._ask(messages)
-    ai.dialog.append_and_get_by_user(event.peer_id, event.from_id, res, True)
+    ai.dialog.append_and_get(event.peer_id, event.from_id, res, True)
 
     m = await client.send_message(
         event.chat_id,
@@ -253,7 +306,7 @@ async def cat_from_stuff_send(event):
 
     # 检查是否有 reaction，因为只有 bot api 支持发送按钮
     m = await client.get_messages(event.chat_id, ids=m.id)
-    if m.reactions is not None and len(m.reactions.results) > 0:
+    if m is not None and m.reactions is not None and len(m.reactions.results) > 0:
         # 有了就不删除，并把结尾的 (10s 后自动删除去掉)
         await client.edit_message(event.chat_id, m, res)
     else:
