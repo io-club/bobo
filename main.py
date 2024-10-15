@@ -208,6 +208,7 @@ async def my_event_handler(event):
                 f"原因: {reason}",
                 reply_to=target_topic_id,
                 link_preview=False,
+                silent=True,
             )
 
     await client.send_read_acknowledge(
