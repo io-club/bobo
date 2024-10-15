@@ -136,6 +136,7 @@ class AI:
                 f"""下面一段话包含了购物推荐信息，判断是否是现摘水果 或者 特别便宜的小零食
 - 不要以水果为原料制作的产品
 - 不要果汁
+- 包柚其实是拼写错误，等于包邮，不是水果
 返回值使用标准 json 格式，不要带有 markdown 格式，需要能被 python json.loads 成功解析，例如：
 {{
     "is_fruit": true,
@@ -172,10 +173,10 @@ class AI:
 ai = AI()
 
 
-@client.on(events.NewMessage(incoming=True, chats=[config.线报]))
+@client.on(events.NewMessage(incoming=True, chats=[config.线报, config.demo191]))
 async def my_event_handler(event):
     print("Message:", event.text)
-
+    target_topic_id = config.TOPIC_DICT["便宜水果"]
     res = ai.if_fruit(event.text)
     if res["is_fruit"]:
         # 转发消息到指定的群组和主题
@@ -189,19 +190,23 @@ async def my_event_handler(event):
                 id=[event.message.id],
                 to_peer=config.IO群,
                 silent=True,
-                top_msg_id=config.TOPIC_DICT["便宜水果"],  # 指定 topic
+                top_msg_id=target_topic_id,  # 指定 topic
             )
         )
 
         use_ai = res["ai"]
         if not use_ai:
-            await client.send_message(config.IO群, f"useAI: {use_ai}")
+            await client.send_message(
+                config.IO群,
+                f"useAI: {use_ai}",
+                reply_to=target_topic_id,
+            )
         else:
             reason = res["reason"]
             await client.send_message(
                 config.IO群,
                 f"原因: {reason}",
-                reply_to=event.message.id,
+                reply_to=target_topic_id,
                 link_preview=False,
             )
 
