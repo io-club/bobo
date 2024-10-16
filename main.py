@@ -1,5 +1,6 @@
 import asyncio
 import json
+import multiprocessing
 from pathlib import Path
 import random
 from telethon import TelegramClient, events
@@ -13,7 +14,7 @@ client = TelegramClient(
     config.api_id,
     config.api_hash,
     proxy=("http", "127.0.0.1", 7890),
-)
+).start()
 
 
 class AI:
@@ -320,7 +321,27 @@ async def cat_from_stuff_send(event):
         await client.delete_messages(event.chat_id, [m.id])
 
 
+bot = TelegramClient(
+    Path("tgapi.bot.session"),
+    config.api_id,
+    config.api_hash,
+    proxy=("http", "127.0.0.1", 7890),
+).start(bot_token=config.bot_token)
+
+
+@bot.on(events.NewMessage(pattern="/start"))
+async def start(event):
+    """Send a message when the command /start is issued."""
+    await event.respond(f"Hi! you say {event.text}")
+    raise events.StopPropagation
+
+
 if __name__ == "__main__":
-    client.start()
-    print("启动了")
-    client.run_until_disconnected()
+    bot_t = multiprocessing.Process(target=lambda: bot.run_until_disconnected())
+    bot_t.start()
+
+    client_t = multiprocessing.Process(target=lambda: client.run_until_disconnected())
+    client_t.start()
+
+    bot_t.join()
+    client_t.join()
